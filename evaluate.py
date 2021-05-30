@@ -1,5 +1,10 @@
 import os
 import time
+from queue import Queue
+from threading import Thread
+
+import concurrent.futures
+
 import pandas as pd
 import numpy as np
 
@@ -29,74 +34,48 @@ else:
 
 ##############################################################################
 
-director_name = input('Director: ')
+names = []
+scores = []
+
+names.append(input('Director: '))
 director_nconst = ''
 
-writer_name = input('Writer: ')
+names.append(input('Writer: '))
 writer_nconst = ''
 
-##############################################################################
+def search(name):
+    for row in name_db.itertuples(index=False):
+        if row[1] == name:
+            nconst = row[0]
+            break
+    films = []
+    for row in crew_db.itertuples(index=False):
+        if nconst in row[1]:
+            films.append(row[0])
+    sum = 0
+    num_films = len(films)
+    for row in rating_db.itertuples(index=False):
+        if row[0] in films:
+            sum += row[1]
+            films.remove(row[0])
 
-print('Searching Name Database ... \n')
+    return sum / num_films
+
 initial_time = time.perf_counter()
-db = pd.read_csv('./data/name_data.tsv', delimiter='\t')
+with concurrent.futures.ThreadPoolExecutor() as executor:
+    name_db = pd.read_csv('./data/name_data.tsv', delimiter='\t', usecols=[0, 1])
+    crew_db = pd.read_csv('./data/crew_data.tsv', delimiter='\t', usecols=[0, 1])
+    rating_db = pd.read_csv('./data/rating_data.tsv', delimiter='\t', usecols=[0, 1])
+    futures = [executor.submit(search, name) for name in names]
 
-for row in db.itertuples(index=False):
-    if row[1] == director_name and director_nconst == '':
-        director_nconst = row[0]
-    if row[1] == writer_name and writer_nconst == '':
-        writer_nconst = row[0]
-    if director_nconst != '' and writer_nconst != '':
-        break
-        
-completion_time = time.perf_counter()
+    completion_time = time.perf_counter()
+
+    for future in futures:
+        scores.append(future.result())
+
+
 print(f'Returned in: {completion_time - initial_time:.2f} seconds.')
-print(director_name, director_nconst)
-print(writer_name, writer_nconst)
-input('Press Enter to Continue ...')
-
-##############################################################################
-
-director_films = []
-writer_films = []
-
-print('Searching Crew Database ... \n')
-initial_time = time.perf_counter()
-db = pd.read_csv('./data/crew_data.tsv', delimiter='\t')
-
-for row in db.itertuples(index=False):
-    if director_nconst in row[1]:
-        director_films.append(row[0])
-    if writer_nconst in row[2]:
-        writer_films.append(row[0])
-
-completion_time = time.perf_counter()
-print(f'Returned in: {completion_time - initial_time:.2f} seconds.')
-print('Director Films:', len(director_films))
-print('Writer Films:', len(writer_films))
-input('Press Enter to Continue ...')
+print(f'{names[0]} Director Score:  {(scores[0]):.2f}')
+print(f'{names[1]} Writer Score: {(scores[1]):.2f}')
 
 ##############################################################################
-
-director_sum = 0
-writer_sum = 0
-dtr_film_length = len(director_films)
-wtr_film_length = len(writer_films)
-
-print('Searching Rating Database ... \n')
-initial_time = time.perf_counter()
-db = pd.read_csv('./data/rating_data.tsv', delimiter='\t')
-
-for row in db.itertuples(index=False):
-    if row[0] in director_films:
-        director_sum += row[1]
-        director_films.remove(row[0])
-    if row[0] in writer_films:
-        writer_sum += row[1]
-        writer_films.remove(row[0])
-
-completion_time = time.perf_counter()
-print(f'Returned in: {completion_time - initial_time:.2f} seconds.')
-print(f'{director_name} Director Score:  {(director_sum / dtr_film_length):.2f}')
-print(f'{writer_name} Writer Score: {(writer_sum / wtr_film_length):.2f}')
-input('Press Enter to Continue ...')
